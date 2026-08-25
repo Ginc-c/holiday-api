@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#080808">
+<title>节日图片</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:hidden;background:#080808;font-family:'PingFang SC','Noto Sans SC','Microsoft YaHei',system-ui,sans-serif}
+
+/* ── 加载动画 ── */
+#loading{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:100;background:#080808;transition:opacity .6s ease}
+#loading.done{opacity:0;pointer-events:none}
+.spinner{width:32px;height:32px;border:2.5px solid #1a1a1a;border-top-color:#555;border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+#loading p{margin-top:14px;color:#333;font-size:12px;letter-spacing:.05em}
+
+/* ── 主图 ── */
+#hero{position:fixed;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity 1s ease}
+#hero.show{opacity:1}
+
+/* ── 底部渐变 ── */
+#gradient{position:fixed;bottom:0;left:0;right:0;height:55%;pointer-events:none;background:linear-gradient(to top,rgba(0,0,0,.55) 0%,rgba(0,0,0,.2) 40%,transparent 100%);z-index:5;opacity:0;transition:opacity 1.2s ease}
+#gradient.show{opacity:1}
+
+/* ── 信息浮层 ── */
+#info{position:fixed;bottom:28px;left:28px;right:28px;z-index:10;opacity:0;transform:translateY(10px);transition:all .7s cubic-bezier(.23,1,.32,1);pointer-events:none;user-select:none}
+#info.show{opacity:1;transform:translateY(0)}
+#info .name{font-size:clamp(24px,5vw,36px);font-weight:700;color:#fff;text-shadow:0 2px 20px rgba(0,0,0,.5);letter-spacing:.03em;line-height:1.2}
+#info .meta{display:flex;align-items:center;gap:12px;margin-top:8px;flex-wrap:wrap}
+#info .date{font-size:clamp(13px,2.5vw,15px);color:rgba(255,255,255,.7);text-shadow:0 1px 8px rgba(0,0,0,.4)}
+#info .sep{width:3px;height:3px;border-radius:50%;background:rgba(255,255,255,.35)}
+#info .countdown{font-size:clamp(12px,2vw,14px);color:rgba(255,255,255,.5);text-shadow:0 1px 6px rgba(0,0,0,.3)}
+
+/* ── 右下角工具按钮 ── */
+#tools{position:fixed;bottom:28px;right:28px;z-index:20;display:flex;gap:8px;opacity:0;transition:opacity .5s}
+#tools.show{opacity:1}
+.tool-btn{width:36px;height:36px;border-radius:50%;border:1.5px solid rgba(255,255,255,.2);background:rgba(0,0,0,.35);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);color:rgba(255,255,255,.7);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:14px;transition:all .2s}
+.tool-btn:hover{border-color:rgba(255,255,255,.5);color:#fff;background:rgba(255,255,255,.1)}
+.tool-btn.copied{border-color:rgba(168,216,168,.6);color:#a8d8a8}
+
+/* ── 错误态 ── */
+#error{position:fixed;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;z-index:50;background:#080808;padding:40px}
+#error.show{display:flex}
+#error .icon{font-size:48px;margin-bottom:16px;opacity:.3}
+#error h2{color:#666;font-size:16px;font-weight:400;margin-bottom:8px}
+#error p{color:#444;font-size:13px;text-align:center;max-width:400px;line-height:1.6}
+#error code{color:#777;background:#141414;padding:2px 8px;border-radius:4px;font-size:12px;font-family:'DM Mono','Fira Code',monospace}
+
+/* ── JSON 视图 ── */
+#json-view{position:fixed;inset:0;overflow:auto;background:#0a0a0a;color:#a8d8a8;font:12px/1.7 'DM Mono','Fira Code','Courier New',monospace;padding:32px;display:none;white-space:pre-wrap;word-break:break-all}
+#json-view.show{display:block}
+
+/* ── Debug 视图 ── */
+#debug{position:fixed;inset:0;overflow:auto;background:#0a0a0a;padding:28px 32px;display:none}
+#debug.show{display:block}
+#debug h1{font-size:16px;color:#e8c547;font-weight:600;margin-bottom:20px;letter-spacing:.04em}
+#debug h2{font-size:13px;color:#7a7570;font-weight:400;margin:24px 0 10px;text-transform:uppercase;letter-spacing:.1em}
+#debug .kv{display:flex;gap:8px;padding:4px 0;font-size:12px;line-height:1.6;color:#999}
+#debug .kv b{color:#ccc;font-weight:500;min-width:60px}
+#debug table{width:100%;border-collapse:collapse;font-size:11px;margin:6px 0}
+#debug th{text-align:left;color:#555;font-weight:400;padding:5px 10px;border-bottom:1px solid #161616}
+#debug td{padding:5px 10px;border-bottom:1px solid #111;color:#888}
+#debug tr.target td{color:#e8c547;background:#12120a}
+#debug .has{color:#a8d8a8}
+#debug .miss{color:#333}
+
+/* ── 点击恢复信息 ── */
+@media (hover:hover){
+  #hero.show{cursor:pointer}
+}
+</style>
+</head>
+<body>
+
+<div id="loading">
+  <div class="spinner"></div>
+  <p>计算节日中</p>
+</div>
+
+<img id="hero" alt="节日图片">
+<div id="gradient"></div>
+
+<div id="info">
+  <div class="name" id="iName"></div>
+  <div class="meta">
+    <span class="date" id="iDate"></span>
+    <span class="sep"></span>
+    <span class="countdown" id="iCd"></span>
+  </div>
+</div>
+
+<div id="tools">
+  <button class="tool-btn" id="btnUrl" title="复制图片直链">&#128279;</button>
+  <button class="tool-btn" id="btnJson" title="查看 JSON">&#123;&#125;</button>
+</div>
+
+<div id="error">
+  <div class="icon">&#127748;</div>
+  <h2 id="eTitle">暂无图片</h2>
+  <p id="eMsg"></p>
+</div>
+
+<div id="json-view"></div>
+<div id="debug"></div>
+
+<script>
+(function(){
+'use strict';
+
+// ═══════════════════════════════════════════════════════════
+//  §1  配置（唯一需要改的地方）
+// ═══════════════════════════════════════════════════════════
+
+var CFG = {
+  imgDir  : 'images/',                          // 图片目录
+  imgExts : ['.jpg','.png','.webp','.gif'],      // 尝试的扩展名（按优先级）
+  defImg  : 'images/default.jpg',               // 兜底图片
+  hideMs  : 6000                                // 浮层自动隐藏(毫秒)，0=常驻
+};
+
+// ═══════════════════════════════════════════════════════════
+//  §2  拼音映射
+// ═══════════════════════════════════════════════════════════
+
+var PY = {
+  '元旦':'yuandan','情人节':'qingrenjie','妇女节':'funvjie',
+  '植树节':'zhishujie','愚人节':'yurenjie','劳动节':'laodongjie',
+  '青年节':'qingnianjie','儿童节':'ertongjie','建党节':'jiandangjie',
+  '建军节':'jianjunjie','教师节':'jiaoshijie','国庆节':'guoqingjie',
+  '万圣节':'wanshengjie','感恩节':'ganenjie','圣诞节':'shengdanjie',
+  '母亲节':'muqinjie','父亲节':'fuqinjie',
+  '春节':'chunjie','元宵节':'yuanxiaojie','龙抬头':'longtaitou',
+  '端午节':'duanwujie','七夕':'qixi','中元节':'zhongyuanjie',
+  '中秋节':'zhongqiujie','重阳节':'chongyangjie','腊八节':'labajie',
+  '小年':'xiaonian','除夕':'chuxi',
+  '小寒':'xiaohan','大寒':'dahan','立春':'lichun','雨水':'yushui',
+  '惊蛰':'jingzhe','春分':'chunfen','清明':'qingming','谷雨':'guyu',
+  '立夏':'lixia','小满':'xiaoman','芒种':'mangzhong','夏至':'xiazhi',
+  '小暑':'xiaoshu','大暑':'dashu','立秋':'liqiu','处暑':'chushu',
+  '白露':'bailu','秋分':'qiufen','寒露':'hanlu','霜降':'shuangjiang',
+  '立冬':'lidong','小雪':'xiaoxue','大雪':'daxue','冬至':'dongzhi'
+};
+
+// ═══════════════════════════════════════════════════════════
+//  §3  农历引擎（覆盖 1900 – 2049）
+// ═══════════════════════════════════════════════════════════
+
+var LI = [
+  0x04bd8,0x04ae0,0x0a570,0x054d5,0x0d260,0x0d950,0x16554,0x056a0,0x09ad0,0x055d2,
+  0x04ae0,0x0a5b6,0x0a4d0,0x0d250,0x1d255,0x0b540,0x0d6a0,0x0ada2,0x095b0,0x14977,
+  0x04970,0x0a4b0,0x0b4b5,0x06a50,0x06d40,0x1ab54,0x02b60,0x09570,0x052f2,0x04970,
+  0x06566,0x0d4a0,0x0ea50,0x16a95,0x05ad0,0x02b60,0x186e3,0x092e0,0x1c8d7,0x0c950,
+  0x0d4a0,0x1d8a6,0x0b550,0x056a0,0x1a5b4,0x025d0,0x092d0,0x0d2b2,0x0a950,0x0b557,
+  0x06ca0,0x0b550,0x15355,0x04da0,0x0a5b0,0x14573,0x052b0,0x0a9a8,0x0e950,0x06aa0,
+  0x0aea6,0x0ab50,0x04b60,0x0aae4,0x0a570,0x05260,0x0f263,0x0d950,0x05b57,0x056a0,
+  0x096d0,0x04dd5,0x04ad0,0x0a4d0,0x0d4d4,0x0d250,0x0d558,0x0b540,0x0b6a0,0x195a6,
+  0x095b0,0x049b0,0x0a974,0x0a4b0,0x0b27a,0x06a50,0x06d40,0x0af46,0x0ab60,0x09570,
+  0x04af5,0x04970,0x064b0,0x074a3,0x0ea50,0x06b58,0x05ac0,0x0ab60,0x096d5,0x092e0,
+  0x0c960,0x0d954,0x0d4a0,0x0da50,0x07552,0x056a0,0x0abb7,0x025d0,0x092d0,0x0cab5,
+  0x0a950,0x0b4a0,0x0baa4,0x0ad50,0x055d9,0x04ba0,0x0a5b0,0x15176,0x052b0,0x0a930,
+  0x07954,0x06aa0,0x0ad50,0x05b52,0x04b60,0x0a6e6,0x0a4e0,0x0d260,0x0ea65,0x0d530,
+  0x05aa0,0x076a3,0x096d0,0x04afb,0x04ad0,0x0a4d0,0x1d0b6,0x0d250,0x0d520,0x0dd45,
+  0x0b5a0,0x056d0,0x055b2,0x049b0,0x0a577,0x0a4b0,0x0aa50,0x1b255,0x06d20,0x0ada0
+];
+
+var Lunar = {
+  leapM : function(y){ return LI[y-1900] & 0xf },
+  leapD : function(y){ var m=this.leapM(y); return m?(LI[y-1900]&0x10000?30:29):0 },
+  mDays : function(y,m){ return (LI[y-1900]&(0x10000>>m))?30:29 },
+  yDays : function(y){
+    var s=348,i;
+    for(i=0x8000;i>0x8;i>>=1) s+=(LI[y-1900]&i)?1:0;
+    return s+this.leapD(y);
+  },
+  toLunar : function(Y,M,D){
+    var base=new Date(1900,0,31);
+    var off=Math.floor((new Date(Y,M-1,D)-base)/864e5);
+    var ly=1900,lm,ld,isLeap=false,leap,m,d;
+    while(ly<2100&&off>=(d=this.yDays(ly))){off-=d;ly++}
+    leap=this.leapM(ly);
+    for(m=1;m<=12;m++){
+      var md=this.mDays(ly,m);
+      if(off<md){lm=m;break}
+      off-=md;
+      if(m===leap&&leap>0){
+        var ld2=this.leapD(ly);
+        if(off<ld2){lm=m;isLeap=true;break}
+        off-=ld2;
+      }
+    }
+    return {year:ly,month:lm,day:off+1,isLeap:isLeap};
+  },
+  toSolar : function(ly,lm,ld){
+    if(ly<1900||ly>2049) return null;
+    var off=0,y,m,leap=this.leapM(ly);
+    for(y=1900;y<ly;y++) off+=this.yDays(y);
+    for(m=1;m<lm;m++){
+      off+=this.mDays(ly,m);
+      if(m===leap) off+=this.leapD(ly);
+    }
+    off+=ld-1;
+    var d=new Date(Date.UTC(1900,0,31)+off*864e5);
+    return {year:d.getUTCFullYear(),month:d.getUTCMonth()+1,day:d.getUTCDate()};
+  }
+};
+
+// ═══════════════════════════════════════════════════════════
+//  §4  节气计算（21 世纪公式）
+// ═══════════════════════════════════════════════════════════
+
+var TC=[5.4055,20.12,3.87,18.73,5.63,20.646,4.81,20.1,
+        5.52,21.04,5.678,21.37,7.108,22.83,7.5,22.43,
+        7.52,22.44,8.318,23.13,7.438,22.36,7.18,21.94];
+var TM=[1,1,2,2,3,3,4,4,5,5,6,6,7,7,8,8,9,9,10,10,11,11,12,12];
+
+function termDate(year,idx){
+  var y=year%100;
+  var d=Math.floor(y*0.2422+TC[idx])-Math.floor((y-1)/4);
+  return {month:TM[idx],day:d};
+}
+
+// ═══════════════════════════════════════════════════════════
+//  §5  辅助
+// ═══════════════════════════════════════════════════════════
+
+function nthWeek(y,m,w,n){
+  var first=new Date(y,m-1,1);
+  var fw=first.getDay();
+  var add=(w-fw+7)%7+(n-1)*7;
+  return new Date(y,m-1,1+add);
+}
+
+function fmt(d){
+  var dd = d instanceof Date ? d : new Date(d);
+  return dd.getFullYear()+'-'+('0'+(dd.getMonth()+1)).slice(-2)+'-'+('0'+dd.getDate()).slice(-2);
+}
+
+// ═══════════════════════════════════════════════════════════
+//  §6  收集节日
+// ═══════════════════════════════════════════════════════════
+
+function collect(year){
+  var list=[], Y=[year-1,year,year+1], i, j, n, md, ts, s, chunjieArr=[];
+
+  // ── 公历固定 ──
+  var fix={
+    '元旦':{m:1,d:1},'情人节':{m:2,d:14},'妇女节':{m:3,d:8},'植树节':{m:3,d:12},
+    '愚人节':{m:4,d:1},'劳动节':{m:5,d:1},'青年节':{m:5,d:4},'儿童节':{m:6,d:1},
+    '建党节':{m:7,d:1},'建军节':{m:8,d:1},'教师节':{m:9,d:10},'国庆节':{m:10,d:1},
+    '万圣节':{m:10,d:31},'圣诞节':{m:12,d:25}
+  };
+  for(n in fix) for(i=0;i<3;i++){
+    ts=new Date(Y[i],fix[n].m-1,fix[n].d);
+    list.push({name:n,date:fmt(ts),ts:+ts});
+  }
+
+  // ── 公历动态 ──
+  for(i=0;i<3;i++){
+    var dy=Y[i];
+    ts=nthWeek(dy,5,0,2); list.push({name:'母亲节',date:fmt(ts),ts:+ts});
+    ts=nthWeek(dy,6,0,3); list.push({name:'父亲节',date:fmt(ts),ts:+ts});
+    ts=nthWeek(dy,11,4,4); list.push({name:'感恩节',date:fmt(ts),ts:+ts});
+  }
+
+  // ── 农历节日 ──
+  var lun={
+    '春节':{m:1,d:1},'元宵节':{m:1,d:15},'龙抬头':{m:2,d:2},
+    '端午节':{m:5,d:5},'七夕':{m:7,d:7},'中元节':{m:7,d:15},
+    '中秋节':{m:8,d:15},'重阳节':{m:9,d:9},'腊八节':{m:12,d:8},'小年':{m:12,d:23}
+  };
+  for(i=0;i<3;i++){
+    var ly=Y[i];
+    for(n in lun){
+      s=Lunar.toSolar(ly,lun[n].m,lun[n].d);
+      if(!s||s.year<1) continue;
+      ts=new Date(s.year,s.month-1,s.day);
+      list.push({name:n,date:fmt(ts),ts:+ts});
+    }
+    // 春节（记录用于算除夕）
+    s=Lunar.toSolar(ly,1,1);
+    if(s&&s.year>0){
+      chunjieArr.push(+new Date(s.year,s.month-1,s.day));
+    }
+    // 除夕 = 下一年春节 - 1天
+    s=Lunar.toSolar(ly+1,1,1);
+    if(s&&s.year>0){
+      ts=new Date(s.year,s.month-1,s.day-1);
+      list.push({name:'除夕',date:fmt(ts),ts:+ts});
+    }
+  }
+
+  // ── 二十四节气 ──
+  var terms=['小寒','大寒','立春','雨水','惊蛰','春分','清明','谷雨',
+             '立夏','小满','芒种','夏至','小暑','大暑','立秋','处暑',
+             '白露','秋分','寒露','霜降','立冬','小雪','大雪','冬至'];
+  for(i=0;i<24;i++){
+    for(j=0;j<2;j++){
+      var td=termDate(Y[j+1],i);
+      if(td.day>0){
+        ts=new Date(Y[j+1],td.month-1,td.day);
+        list.push({name:terms[i],date:fmt(ts),ts:+ts});
+      }
+    }
+  }
+
+  return list;
+}
+
+// ═══════════════════════════════════════════════════════════
+//  §7  图片加载（自动尝试多扩展名）
+// ═══════════════════════════════════════════════════════════
+
+var extCache=null;
+
+function loadImg(name){
+  var py=PY[name];
+  if(!py) return Promise.resolve(null);
+  return new Promise(function(ok){
+    var exts=extCache?[extCache]:CFG.imgExts, i=0;
+    (function next(){
+      if(i>=exts.length){ok(null);return}
+      var img=new Image();
+      img.onload=function(){
+        if(!extCache) extCache=exts[i];
+        ok(CFG.imgDir+py+exts[i]);
+      };
+      img.onerror=function(){i++;next()};
+      img.src=CFG.imgDir+py+exts[i];
+    })();
+  });
+}
+
+function loadDefault(){
+  return new Promise(function(ok){
+    var img=new Image();
+    img.onload=function(){ok(CFG.defImg)};
+    img.onerror=function(){ok(null)};
+    img.src=CFG.defImg;
+  });
+}
+
+// ═══════════════════════════════════════════════════════════
+//  §8  UI
+// ═══════════════════════════════════════════════════════════
+
+var $hero=document.getElementById('hero');
+var $loading=document.getElementById('loading');
+var $grad=document.getElementById('gradient');
+var $info=document.getElementById('info');
+var $tools=document.getElementById('tools');
+var $error=document.getElementById('error');
+var $json=document.getElementById('json-view');
+var $debug=document.getElementById('debug');
+var hideTimer=null;
+
+function showImage(url,h){
+  document.title=h.name+' · 节日图片';
+  $hero.onload=function(){
+    $loading.classList.add('done');
+    $hero.classList.add('show');
+    $grad.classList.add('show');
+    $tools.classList.add('show');
+    showInfo(h);
+  };
+  $hero.onerror=function(){showErr('图片加载失败','路径: '+url)};
+  $hero.src=url;
+}
+
+function showInfo(h){
+  document.getElementById('iName').textContent=h.name;
+  document.getElementById('iDate').textContent=h.date;
+
+  var now=Date.now();
+  var diff=Math.round((h.ts-now)/864e5);
+  var cd;
+  if(diff>0) cd='距今还有 '+diff+' 天';
+  else if(diff<0) cd=Math.abs(diff)+' 天前';
+  else cd='✦ 就是今天';
+  document.getElementById('iCd').textContent=cd;
+
+  $info.classList.add('show');
+  clearTimeout(hideTimer);
+  if(CFG.hideMs>0){
+    hideTimer=setTimeout(function(){$info.classList.remove('show')},CFG.hideMs);
+  }
+}
+
+function showErr(title,msg){
+  $loading.classList.add('done');
+  document.getElementById('eTitle').textContent=title;
+  document.getElementById('eMsg').innerHTML=msg;
+  $error.classList.add('show');
+}
+
+// 点击画面恢复信息
+$hero.addEventListener('click',function(e){
+  if(e.target===$hero){
+    $info.classList.toggle('show');
+    clearTimeout(hideTimer);
+  }
+});
+
+// ═══════════════════════════════════════════════════════════
+//  §9  JSON / Debug 视图
+// ═══════════════════════════════════════════════════════════
+
+function renderJSON(data){
+  $loading.style.display='none';
+  $json.textContent=JSON.stringify(data,null,2);
+  $json.classList.add('show');
+  document.title='JSON · 节日图片';
+}
+
+function renderDebug(today,holidays,target,imgUrl){
+  $loading.style.display='none';
+  var todayTs=+new Date(today);
+  var h='<h1>调试信息</h1>';
+  h+='<div class="kv"><b>今天</b>'+today+'</div>';
+  h+='<div class="kv"><b>选中</b>'+target.name+' ('+target.date+')</div>';
+  h+='<div class="kv"><b>拼音</b>'+(PY[target.name]||'-')+'</div>';
+  h+='<div class="kv"><b>图片</b>'+(imgUrl||'未找到')+'</div>';
+  h+='<h2>当前年节日列表</h2>';
+  h+='<table><tr><th>节日</th><th>日期</th><th>拼音</th><th>图片路径</th><th>距今</th></tr>';
+  for(var i=0;i<holidays.length;i++){
+    var hh=holidays[i], py=PY[hh.name]||'', days=Math.round((hh.ts-todayTs)/864e5);
+    var cls=hh===target?' class="target"':'';
+    var imgPath=py?CFG.imgDir+py+CFG.imgExts[0]:'-';
+    h+='<tr'+cls+'><td>'+hh.name+'</td><td>'+hh.date+'</td><td>'+py+'</td><td>'+imgPath+'</td><td>'+(days>0?'+'+days:days)+'</td></tr>';
+  }
+  h+='</table>';
+  $debug.innerHTML=h;
+  $debug.classList.add('show');
+  document.title='Debug · 节日图片';
+}
+
+// ═══════════════════════════════════════════════════════════
+//  §10  按钮交互
+// ═══════════════════════════════════════════════════════════
+
+// 复制图片直链
+document.getElementById('btnUrl').addEventListener('click',function(e){
+  e.stopPropagation();
+  var src=$hero.src;
+  if(!src) return;
+  var btn=this;
+  if(navigator.clipboard){
+    navigator.clipboard.writeText(src).then(function(){
+      btn.classList.add('copied');btn.innerHTML='&#10003;';
+      setTimeout(function(){btn.classList.remove('copied');btn.innerHTML='&#128279;'},1500);
+    });
+  }
+});
+
+// JSON 按钮
+document.getElementById('btnJson').addEventListener('click',function(e){
+  e.stopPropagation();
+  if($json.classList.contains('show')){
+    $json.classList.remove('show');$hero.style.display='';$grad.style.display='';$info.style.display='';$tools.style.display='';
+  } else {
+    var now=new Date(),year=now.getFullYear();
+    var hs=collect(year);
+    var todayTs=+new Date(now.getFullYear(),now.getMonth(),now.getDate());
+    hs.sort(function(a,b){
+      var da=Math.abs(a.ts-todayTs),db=Math.abs(b.ts-todayTs);
+      if(da!==db) return da-db;
+      return(b.ts>=todayTs?1:0)-(a.ts>=todayTs?1:0);
+    });
+    var seen={},unique=[];
+    for(var i=0;i<hs.length;i++){
+      var k=hs[i].name+'|'+hs[i].date;
+      if(!seen[k]){seen[k]=1;unique.push(hs[i])}
+    }
+    $hero.style.display='none';$grad.style.display='none';$info.style.display='none';$tools.style.display='none';
+    renderJSON({today:fmt(now),count:unique.length,holidays:unique});
+  }
+});
+
+// ═══════════════════════════════════════════════════════════
+//  §11  URL 参数
+// ═══════════════════════════════════════════════════════════
+
+var params=new URLSearchParams(location.search);
+var P={
+  debug  : params.has('debug'),
+  json   : params.has('json'),
+  next   : params.has('next'),
+  holi   : params.get('holiday')||'',
+  noInfo : params.get('info')==='0'
+};
+
+// ═══════════════════════════════════════════════════════════
+//  §12  主逻辑
+// ═══════════════════════════════════════════════════════════
+
+async function main(){
+  var now=new Date();
+  var today=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+  var todayTs=+today;
+  var year=now.getFullYear();
+
+  var holidays=collect(year);
+
+  // 去重
+  var seen={},unique=[];
+  holidays.sort(function(a,b){return a.ts-b.ts});
+  for(var i=0;i<holidays.length;i++){
+    var k=holidays[i].name+'|'+holidays[i].date;
+    if(!seen[k]){seen[k]=1;unique.push(holidays[i])}
+  }
+  holidays=unique;
+
+  // 按距今排序
+  holidays.sort(function(a,b){
+    var da=Math.abs(a.ts-todayTs),db=Math.abs(b.ts-todayTs);
+    if(da!==db) return da-db;
+    return(b.ts>=todayTs?1:0)-(a.ts>=todayTs?1:0);
+  });
+
+  // ── Debug 模式 ──
+  if(P.debug){
+    var target0=holidays[0];
+    if(P.next){for(i=0;i<holidays.length;i++){if(holidays[i].ts>=todayTs){target0=holidays[i];break}}}
+    if(P.holi){for(i=0;i<holidays.length;i++){if(holidays[i].name===P.holi){target0=holidays[i];break}}}
+    var py0=PY[target0.name]||'';
+    var img0=py0?CFG.imgDir+py0+CFG.imgExts[0]:null;
+    renderDebug(fmt(today),holidays,target0,img0);
+    return;
+  }
+
+  // ── JSON 模式 ──
+  if(P.json){
+    var out=[];
+    for(i=0;i<Math.min(holidays.length,60);i++){
+      var h=holidays[i];
+      out.push({name:h.name,date:h.date,pinyin:PY[h.name]||'',days:Math.round((h.ts-todayTs)/864e5)});
+    }
+    renderJSON({today:fmt(today),count:out.length,holidays:out});
+    return;
+  }
+
+  // ── 选目标 ──
+  var target=holidays[0];
+  if(P.next){for(i=0;i<holidays.length;i++){if(holidays[i].ts>=todayTs){target=holidays[i];break}}}
+  if(P.holi){for(i=0;i<holidays.length;i++){if(holidays[i].name===P.holi){target=holidays[i];break}}}
+
+  // ── 加载图片 ──
+  var imgUrl=await loadImg(target.name);
+
+  if(!imgUrl){
+    for(i=0;i<holidays.length;i++){
+      if(holidays[i].name===target.name) continue;
+      imgUrl=await loadImg(holidays[i].name);
+      if(imgUrl){target=holidays[i];break}
+    }
+  }
+
+  if(!imgUrl) imgUrl=await loadDefault();
+
+  if(P.noInfo) CFG.hideMs=0;
+
+  if(imgUrl){
+    showImage(imgUrl,target);
+  } else {
+    showErr('images 文件夹为空',
+      '请在仓库的 <code>images/</code> 目录中上传图片<br>'+
+      '文件名使用拼音，如 <code>zhongqiujie.jpg</code><br><br>'+
+      '最近的节日：<strong>'+target.name+'</strong> '+target.date);
+  }
+}
+
+main();
+
+})();
+</script>
+</body>
+</html>

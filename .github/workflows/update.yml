@@ -4,15 +4,15 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write    # 允许 push
+  contents: write
 
 jobs:
   update:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5    # 升级到 v5，支持 Node 24
 
-      # ... 你的其他步骤 ...
+      # ... 你的其他步骤（生成图片等）...
 
       - name: Commit and push
         run: |

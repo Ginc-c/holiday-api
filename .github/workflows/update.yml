@@ -1,22 +1,21 @@
-name: Update Holiday Image
+name: Deploy
+
 on:
-  schedule:
-    - cron: '30 0 * * *'
-  workflow_dispatch:
+  workflow_dispatch:  # 手动触发
+
+permissions:
+  contents: write     # 关键：允许 push
 
 jobs:
-  update:
+  deploy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+
+      # ... 你的构建步骤 ...
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
         with:
-          node-version: '18'
-      - run: node update.js
-      - name: Commit
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add current.jpg
-          git diff --cached --quiet || git commit -m "update holiday image"
-          git push
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./public

@@ -1,21 +1,23 @@
-name: Deploy
+name: Update Holiday Image
 
 on:
-  workflow_dispatch:  # 手动触发
+  workflow_dispatch:
 
 permissions:
-  contents: write     # 关键：允许 push
+  contents: write    # 允许 push
 
 jobs:
-  deploy:
+  update:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      # ... 你的构建步骤 ...
+      # ... 你的其他步骤 ...
 
-      - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v3
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./public
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add current.jpg
+          git diff --cached --quiet || git commit -m "update holiday image"
+          git push
